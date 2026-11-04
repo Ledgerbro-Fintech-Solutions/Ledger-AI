@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  ledger-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ledger-ai-app
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY:-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}
+      - GROQ_MODEL_EXTRACTION=qwen/qwen3.8-27b
+      - GROQ_MODEL_STANDARDIZATION=openai/gpt-oss-20b
+      - GROQ_MODEL_CHAT=openai/gpt-oss-20b
+      - HOST=0.0.0.0
+      - PORT=8000
+      - SERVE_FRONTEND=true
+      - FRONTEND_DIST_DIR=/app/dist
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

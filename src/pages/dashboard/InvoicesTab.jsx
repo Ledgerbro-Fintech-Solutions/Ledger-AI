@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 const SUMMARY_METRICS = [
   {
@@ -95,33 +95,117 @@ const INVOICE_BATCHES = [
 ];
 
 export default function InvoicesTab({ onNavigateTab }) {
+  const [batches, setBatches] = useState(INVOICE_BATCHES);
   const [selectedBatchId, setSelectedBatchId] = useState(1);
   const [isPreviewOpen, setIsPreviewOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCheckboxes, setSelectedCheckboxes] = useState([1]);
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'grid'
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  const fileInputRef = useRef(null);
 
   const triggerToast = (msg, actionText = null, onAction = null) => {
     setToastMessage({ text: msg, actionText, onAction });
     setTimeout(() => {
       setToastMessage(null);
-    }, 4500);
+    }, 5500);
   };
 
-  const selectedBatch = INVOICE_BATCHES.find((b) => b.id === selectedBatchId) || INVOICE_BATCHES[0];
+  const selectedBatch = batches.find((b) => b.id === selectedBatchId) || batches[0] || INVOICE_BATCHES[0];
 
-  const filteredBatches = INVOICE_BATCHES.filter((b) =>
+  const filteredBatches = batches.filter((b) =>
     b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     b.source.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const toggleSelectAll = () => {
-    if (selectedCheckboxes.length === INVOICE_BATCHES.length) {
+    if (selectedCheckboxes.length === batches.length) {
       setSelectedCheckboxes([]);
     } else {
-      setSelectedCheckboxes(INVOICE_BATCHES.map((b) => b.id));
+      setSelectedCheckboxes(batches.map((b) => b.id));
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    triggerToast(`Extracting structured data from ${files.length} invoice(s) using Groq Vision LLM...`);
+
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) {
+      formData.append('files', files[i]);
+    }
+
+    try {
+      const resp = await fetch('/extract-ocr-data', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || err.error || 'Failed to extract invoice');
+      }
+
+      const resData = await resp.json();
+      const extractedItems = [];
+      let totalRows = 0;
+
+      resData.data.forEach((doc) => {
+        const vendor = doc.invoice_details?.vendor_name || 'Extracted Vendor';
+        const invNum = doc.invoice_details?.invoice_number || 'INV-EXT';
+        if (doc.line_items && doc.line_items.length > 0) {
+          doc.line_items.forEach((item, idx) => {
+            extractedItems.push({
+              id: `${invNum}-${idx + 1}`,
+              vendor: vendor,
+              amount: `$${(item.total_price || 0).toFixed(2)}`
+            });
+            totalRows++;
+          });
+        } else {
+          extractedItems.push({
+            id: invNum,
+            vendor: vendor,
+            amount: `$${(doc.invoice_details?.total_amount || 0).toFixed(2)}`
+          });
+          totalRows++;
+        }
+      });
+
+      const newBatch = {
+        id: Date.now(),
+        name: `Extracted Batch (${files[0].name})`,
+        source: `Direct Upload / ${files.length} document(s)`,
+        rows: totalRows.toString(),
+        status: 'Ready',
+        statusColor: 'emerald',
+        tags: ['#AI_Extracted', '#GroqVision'],
+        created: 'Just now',
+        columns: '12',
+        lastExport: 'Never',
+        items: extractedItems,
+        rawOcrData: resData
+      };
+
+      setBatches((prev) => [newBatch, ...prev]);
+      setSelectedBatchId(newBatch.id);
+      setSelectedCheckboxes([newBatch.id]);
+      setIsPreviewOpen(true);
+      triggerToast(
+        `Extracted ${totalRows} line items successfully!`,
+        'Ask AI Assistant',
+        () => onNavigateTab && onNavigateTab('AI Assistant')
+      );
+    } catch (err) {
+      triggerToast(`Upload error: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -183,12 +267,24 @@ export default function InvoicesTab({ onNavigateTab }) {
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            accept=".pdf,.png,.jpg,.jpeg,.webp"
+            multiple
+            className="hidden"
+          />
           <button
             type="button"
-            className="h-10 px-5 bg-text-primary hover:bg-black text-white rounded-lg font-sans font-medium text-xs flex items-center gap-2 transition-all shadow-sm active:scale-[0.99]"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="h-10 px-5 bg-text-primary hover:bg-black text-white rounded-lg font-sans font-medium text-xs flex items-center gap-2 transition-all shadow-sm active:scale-[0.99] disabled:opacity-50"
           >
-            <span className="material-symbols-outlined text-[18px]">add</span>
-            <span>Upload Invoices</span>
+            <span className="material-symbols-outlined text-[18px]">
+              {isUploading ? 'sync' : 'add'}
+            </span>
+            <span>{isUploading ? 'Processing with AI...' : 'Upload Invoices'}</span>
           </button>
         </div>
       </div>
@@ -485,6 +581,14 @@ export default function InvoicesTab({ onNavigateTab }) {
 
               {/* Action Buttons */}
               <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab && onNavigateTab('AI Assistant')}
+                  className="w-full h-9 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg font-sans font-medium text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs"
+                >
+                  <span className="material-symbols-outlined text-[16px]">smart_toy</span>
+                  <span>Ask AI About This Batch</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => onNavigateTab && onNavigateTab('Reports')}

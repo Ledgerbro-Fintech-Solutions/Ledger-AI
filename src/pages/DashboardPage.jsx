@@ -5,6 +5,8 @@ import ExportsTab from './dashboard/ExportsTab';
 import FoldersTab from './dashboard/FoldersTab';
 import ReportsTab from './dashboard/ReportsTab';
 import SettingsTab from './dashboard/SettingsTab';
+import ChatbotTab from './dashboard/ChatbotTab';
+import PhotoToCsvTab from './dashboard/PhotoToCsvTab';
 
 const KPI_DATA = [
   {
@@ -201,6 +203,8 @@ export default function DashboardPage({ onNavigate }) {
           <ul className="space-y-1">
             {[
               { id: 'Dashboard', icon: 'dashboard' },
+              { id: 'OCR to CSV', icon: 'table_view' },
+              { id: 'AI Assistant', icon: 'smart_toy' },
               { id: 'Invoices', icon: 'receipt_long' },
               { id: 'Exports', icon: 'ios_share' }
             ].map((item) => {
@@ -381,7 +385,11 @@ export default function DashboardPage({ onNavigate }) {
           <div className="max-w-[1240px] mx-auto">
             
             {/* Conditional Tab Rendering */}
-            {activeTab === 'Invoices' ? (
+            {activeTab === 'OCR to CSV' ? (
+              <PhotoToCsvTab onNavigateTab={setActiveTab} />
+            ) : activeTab === 'AI Assistant' ? (
+              <ChatbotTab onNavigateTab={setActiveTab} />
+            ) : activeTab === 'Invoices' ? (
               <InvoicesTab onNavigateTab={setActiveTab} />
             ) : activeTab === 'Exports' ? (
               <ExportsTab />
@@ -407,7 +415,19 @@ export default function DashboardPage({ onNavigate }) {
                   </div>
 
                   <div className="flex items-center gap-2.5 shrink-0">
-                    <button type="button" className="h-10 px-5 bg-text-primary hover:bg-black text-white rounded-lg font-sans font-medium text-xs flex items-center gap-2 transition-all shadow-sm active:scale-[0.99]">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('AI Assistant')}
+                      className="h-10 px-4 bg-white hover:bg-surface-soft border border-border-subtle text-text-primary rounded-lg font-sans font-medium text-xs flex items-center gap-2 transition-all shadow-2xs"
+                    >
+                      <span className="material-symbols-outlined text-[18px] text-blue-600">smart_toy</span>
+                      <span>Ask AI Assistant</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('Invoices')}
+                      className="h-10 px-5 bg-text-primary hover:bg-black text-white rounded-lg font-sans font-medium text-xs flex items-center gap-2 transition-all shadow-sm active:scale-[0.99]"
+                    >
                       <span className="material-symbols-outlined text-[18px]">add</span>
                       <span>Upload Invoices</span>
                     </button>
